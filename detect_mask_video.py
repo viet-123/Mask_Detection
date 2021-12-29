@@ -1,25 +1,29 @@
 # import the necessary packages
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-from tensorflow.keras.preprocessing.image import img_to_array
-from tensorflow.keras.models import load_model
-from imutils.video import VideoStream
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input       
+from tensorflow.keras.preprocessing.image import img_to_array                 
+from tensorflow.keras.models import load_model                                
+from imutils.video import VideoStream                                        
+from playsound import playsound
 import numpy as np
 import imutils
 import time
 import cv2
 import os
+from datetime import datetime
+
+num_frame = 0
+no_wear_mask = 0
+
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
-	# grab the dimensions of the frame and then construct a blob
+	# grab the dimensions of the frame and then construct a blob 
 	# from it
-	(h, w) = frame.shape[:2]
-	blob = cv2.dnn.blobFromImage(frame, 1.0, (224, 224),
-		(104.0, 177.0, 123.0))
+	(h, w) = frame.shape[:2] #slicing 2 phan tu dau tien cua shape  la h va w
+	blob = cv2.dnn.blobFromImage(frame, 1.0, (224, 224),(104, 177, 123)) #tao ra dom mau 4 chieu tu hinh anh
 
 	# pass the blob through the network and obtain the face detections
 	faceNet.setInput(blob)
 	detections = faceNet.forward()
-	print(detections.shape)
 
 	# initialize our list of faces, their corresponding locations,
 	# and the list of predictions from our face mask network
@@ -32,7 +36,6 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 		# extract the confidence (i.e., probability) associated with
 		# the detection
 		confidence = detections[0, 0, i, 2]
-
 		# filter out weak detections by ensuring the confidence is
 		# greater than the minimum confidence
 		if confidence > 0.5:
@@ -72,15 +75,18 @@ def detect_and_predict_mask(frame, faceNet, maskNet):
 	return (locs, preds)
 
 # load our serialized face detector model from disk
-prototxtPath = r"face_detector\deploy.prototxt"
-weightsPath = r"face_detector\res10_300x300_ssd_iter_140000.caffemodel"
-faceNet = cv2.dnn.readNet(prototxtPath, weightsPath)
+prototxtPath = r"face_detector\deploy.prototxt" # xác định kiến trúc mô hình 
+weightsPath = r"face_detector\res10_300x300_ssd_iter_140000.caffemodel" #chứa trọng số cho các lớp thực tế(contains the weights for the actual layers)
+faceNet = cv2.dnn.readNet(prototxtPath, weightsPath) #deep neural networks” (dnn)
 
 # load the face mask detector model from disk
 maskNet = load_model("mask_detector.model")
 
 # initialize the video stream
 print("[INFO] starting video stream...")
+print(".")
+print("Press Q to stop reading")
+print(".")
 vs = VideoStream(src=0).start()
 
 # loop over the frames from the video stream
@@ -105,7 +111,7 @@ while True:
 		# the bounding box and text
 		label = "Mask" if mask > withoutMask else "No Mask"
 		color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
-
+		num_frame+=1
 		# include the probability in the label
 		label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
 
@@ -114,13 +120,26 @@ while True:
 		cv2.putText(frame, label, (startX, startY - 10),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 		cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+		
+		now = datetime.now()
+		dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+		
+		if num_frame%50 == 0: #run after every 50 loops (5 seconds timeframe)
+			if mask < withoutMask:
+				print("No mask detected at: "+ dt_string)
+				no_wear_mask+=1
+				print("Mask-Less person detected. Total : " + str(no_wear_mask))
+				playsound("wearmask.mp3")
+				print(".")
+				print(".")
+				
 
 	# show the output frame
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 
 	# if the `q` key was pressed, break from the loop
-	if key == ord("q"):
+	if key == ord("q") or key == ord("Q"):
 		break
 
 # do a bit of cleanup
